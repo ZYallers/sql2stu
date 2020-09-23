@@ -120,6 +120,7 @@ func showHelpMsg() {
 	shellEcho("->:p		--(print)显示已输入内容；", "tip")
 	shellEcho("->:r		--(reset)清空已输入内容；", "tip")
 	shellEcho("->:c		--(convert)转义已输入内容；", "tip")
+	shellEcho("->:cp		--(convert & export)转义已输入内容并导出Go文件；", "tip")
 	shellEcho("->:q		--(quit)退出程序；", "tip")
 	shellEcho("->:h		--(help)显示帮助信息！", "tip")
 }
