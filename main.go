@@ -12,19 +12,23 @@ import (
 	"strings"
 )
 
+var tableName string
+
 func convert(str string) string {
+	var modelName string
+
 	// 转换数据表名为 model 名称
 	matchTableName := regexp.MustCompile("CREATE TABLE `([a-z_0-9]+)`.*").FindAllStringSubmatch(str, -1)
 	if len(matchTableName) > 0 {
 		for _, row := range matchTableName {
-			tableName := row[1]
-			modelName := strings.ReplaceAll(strings.Title(strings.ReplaceAll(tableName, `_`, ` `)), ` `, ``)
+			tableName = row[1]
+			modelName = strings.ReplaceAll(strings.Title(strings.ReplaceAll(tableName, `_`, ` `)), ` `, ``)
 			str = strings.ReplaceAll(str, row[0], `type `+modelName+` struct {`)
 
 			// 转换数据表结束符
 			tableTail := regexp.MustCompile("\\) (ENGINE|AUTO_INCREMENT=|ROW_FORMAT).*").FindAllString(str, 1)
 			if len(tableTail) > 0 {
-				str = strings.ReplaceAll(str, tableTail[0], "}\n\nfunc (tb "+modelName+") TableName() string {\n    return \""+tableName+"\"\n}")
+				str = strings.ReplaceAll(str, tableTail[0], "}\n\nfunc (tb "+modelName+") TableName() string {\n    return "+modelName+"TN\n}")
 			}
 		}
 	}
@@ -69,6 +73,9 @@ func convert(str string) string {
 	str = strings.ReplaceAll(str, ` ON UPDATE CURRENT_TIMESTAMP`, ``)
 	str = regexp.MustCompile("\\s*(PRIMARY|UNIQUE)? KEY .*(,)?").ReplaceAllString(str, ``)
 
+	// 增加表名的常量定义
+	str = fmt.Sprintf("const %sTN = `%s`\n\n%s", modelName, tableName, str)
+
 	// 增加 package 和 import
 	if regexp.MustCompile(`time.Time`).MatchString(str) {
 		str = "package table\n\nimport \"time\"\n\n" + str
@@ -109,8 +116,17 @@ func execShell(name string, arg ...string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+func showHelpMsg() {
+	shellEcho("->:p		--(print)显示已输入内容；", "tip")
+	shellEcho("->:r		--(reset)清空已输入内容；", "tip")
+	shellEcho("->:c		--(convert)转义已输入内容；", "tip")
+	shellEcho("->:q		--(quit)退出程序；", "tip")
+	shellEcho("->:h		--(help)显示帮助信息！", "tip")
+}
+
 func main() {
 	reader := bufio.NewReader(os.Stdin)
+	showHelpMsg()
 	shellEcho(`请输入您的内容：`, "title")
 	var buf bytes.Buffer
 
@@ -124,35 +140,42 @@ LOOP:
 		}
 		switch text {
 		case ":h":
-			shellEcho("->:p		--(print)显示已输入内容；", "tip")
-			shellEcho("->:r		--(reset)清空已输入内容；", "tip")
-			shellEcho("->:c		--(convert)转义已输入内容；", "tip")
-			shellEcho("->:q		--(quit)退出程序；", "tip")
-			shellEcho("->:h		--(help)显示帮助信息！", "tip")
-		case ":c":
+			showHelpMsg()
+		case ":c", ":cp":
+			var exportText []byte
 			shellEcho("Convert Result:", "title")
 			shellEcho("-----------BEGIN-----------", "tip")
 			output := convert(buf.String())
 			dir, _ := os.Getwd()
-			tmpFile := dir + "/bin/mcs.tmp"
-			if err := ioutil.WriteFile(tmpFile, []byte(output), os.ModePerm); err != nil {
+			cacheFile := dir + "/sql2stu.cache"
+			if err := ioutil.WriteFile(cacheFile, []byte(output), os.ModePerm); err != nil {
 				shellEcho("ioutil.WriteFile Error: "+err.Error(), "err")
 			} else {
-				if _, err := execShell("gofmt", "-l", "-w", "-s", tmpFile); err != nil {
+				if _, err := execShell("gofmt", "-l", "-w", "-s", cacheFile); err != nil {
 					shellEcho("execShell Error: "+err.Error(), "err")
 				} else {
-					if body, err := ioutil.ReadFile(tmpFile); err != nil {
+					if body, err := ioutil.ReadFile(cacheFile); err != nil {
 						shellEcho("ioutil.ReadFile Error: "+err.Error(), "err")
 					} else {
-						if err := os.Remove(tmpFile); err != nil {
+						if err := os.Remove(cacheFile); err != nil {
 							shellEcho("os.Remove Error: "+err.Error(), "err")
 						} else {
+							exportText = body
 							shellEcho(string(body), "ok")
 						}
 					}
 				}
 			}
 			shellEcho("------------END------------", "tip")
+			if text == ":cp" && exportText != nil && tableName != "" {
+				exportFile := fmt.Sprintf("%s/%s.go", dir, tableName)
+				if err := ioutil.WriteFile(exportFile, exportText, os.ModePerm); err != nil {
+					shellEcho("ioutil.WriteFile Error: "+err.Error(), "err")
+				} else {
+					tableName, exportText = "", nil
+					shellEcho(fmt.Sprintf("convert result have exported to \"%s\" file", exportFile), "tip")
+				}
+			}
 		case ":q":
 			shellEcho("已退出！", "ok")
 			break LOOP
