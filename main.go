@@ -28,7 +28,7 @@ func convert(str string) string {
 			// 转换数据表结束符
 			tableTail := regexp.MustCompile("\\) (ENGINE|AUTO_INCREMENT=|ROW_FORMAT).*").FindAllString(str, 1)
 			if len(tableTail) > 0 {
-				str = strings.ReplaceAll(str, tableTail[0], "}\n\nfunc (tb "+modelName+") TableName() string {\n    return "+modelName+"TN\n}")
+				str = strings.ReplaceAll(str, tableTail[0], "}")
 			}
 		}
 	}
@@ -63,7 +63,7 @@ func convert(str string) string {
 	}
 
 	// 转换属性
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(bigint|int|tinyint|smallint)(.*),").ReplaceAllString(str, "$1    int    `${2}type:$3$4\"`")
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(bigint|mediumint|int|integer|smallint|tinyint)(.*),").ReplaceAllString(str, "$1    int    `${2}type:$3$4\"`")
 	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(decimal|float)(.*),").ReplaceAllString(str, "$1    float64    `${2}type:$3$4\"`")
 	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(varchar|char)(.*),").ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
 	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(text)(.*),").ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
