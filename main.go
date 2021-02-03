@@ -38,6 +38,8 @@ func convert(str string) string {
 	str = strings.ReplaceAll(str, ` NULL`, `;null`)
 	str = strings.ReplaceAll(str, ` AUTO_INCREMENT`, `;AUTO_INCREMENT`)
 	str = strings.ReplaceAll(str, ` unsigned`, `;unsigned`)
+	str = regexp.MustCompile("(tinyint|smallint|mediumint|int|bigint|decimal|dec|numeric|fixed|float|double|double precision|real)(.*) DEFAULT '(.*?)'").
+		ReplaceAllString(str, `$1$2;default:$3`) // 去掉数值型默认值中的单引号
 	str = regexp.MustCompile(" DEFAULT '(.*?)'").ReplaceAllString(str, `;default:'$1'`)
 	str = strings.ReplaceAll(str, ` DEFAULT CURRENT_TIMESTAMP`, `;default:CURRENT_TIMESTAMP`)
 
@@ -63,11 +65,16 @@ func convert(str string) string {
 	}
 
 	// 转换属性
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(bigint|mediumint|int|integer|smallint|tinyint)(.*),").ReplaceAllString(str, "$1    int    `${2}type:$3$4\"`")
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(decimal|float)(.*),").ReplaceAllString(str, "$1    float64    `${2}type:$3$4\"`")
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(varchar|char)(.*),").ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(text)(.*),").ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(timestamp;)(.*),").ReplaceAllString(str, "$1    time.Time    `${2}type:$3$4\"`")
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(bigint|mediumint|int|integer|smallint|tinyint)(.*),").
+		ReplaceAllString(str, "$1    int    `${2}type:$3$4\"`")
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(decimal|dec|numeric|fixed|float|double|double precision|real)(.*),").
+		ReplaceAllString(str, "$1    float64    `${2}type:$3$4\"`")
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(varchar|char)(.*),").
+		ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(text)(.*),").
+		ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(timestamp;)(.*),").
+		ReplaceAllString(str, "$1    time.Time    `${2}type:$3$4\"`")
 
 	// 删除不知道怎么转换的属性
 	str = strings.ReplaceAll(str, ` ON UPDATE CURRENT_TIMESTAMP`, ``)
