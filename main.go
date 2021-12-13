@@ -36,7 +36,7 @@ func convert(str string) string {
 	// 转换为小写并且加上前缀;号
 	str = strings.ReplaceAll(str, ` NOT NULL`, `;not null`)
 	str = strings.ReplaceAll(str, ` NULL`, `;null`)
-	str = strings.ReplaceAll(str, ` AUTO_INCREMENT`, `;AUTO_INCREMENT`)
+	str = strings.ReplaceAll(str, ` AUTO_INCREMENT`, `;primaryKey;autoIncrement`)
 	str = strings.ReplaceAll(str, ` unsigned`, `;unsigned`)
 	str = regexp.MustCompile("(tinyint|smallint|mediumint|int|bigint|decimal|dec|numeric|fixed|float|double|double precision|real)(.*) DEFAULT '(.*?)'").
 		ReplaceAllString(str, `$1$2;default:$3`) // 去掉数值型默认值中的单引号
@@ -60,7 +60,7 @@ func convert(str string) string {
 			fieldName := row[1]
 			attribute := row[2]
 			newFieldName := strings.ReplaceAll(strings.Title(strings.ReplaceAll(fieldName, `_`, ` `)), ` `, ``)
-			str = strings.ReplaceAll(str, row[0], "`"+newFieldName+"` json:\""+fieldName+"\" gorm:\"column:"+fieldName+";"+attribute)
+			str = strings.ReplaceAll(str, row[0], "`"+newFieldName+"` json:\""+fieldName+",omitempty\" gorm:\"column:"+fieldName+";"+attribute)
 		}
 	}
 
@@ -74,7 +74,7 @@ func convert(str string) string {
 	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(text)(.*),").
 		ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
 	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(timestamp;)(.*),").
-		ReplaceAllString(str, "$1    time.Time    `${2}type:$3$4\"`")
+		ReplaceAllString(str, "$1    *time.Time    `${2}type:$3$4\"`")
 
 	// 删除不知道怎么转换的属性
 	str = strings.ReplaceAll(str, ` ON UPDATE CURRENT_TIMESTAMP`, ``)
