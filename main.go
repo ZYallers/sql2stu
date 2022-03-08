@@ -60,7 +60,7 @@ func convert(str string) string {
 			fieldName := row[1]
 			attribute := row[2]
 			newFieldName := strings.ReplaceAll(strings.Title(strings.ReplaceAll(fieldName, `_`, ` `)), ` `, ``)
-			str = strings.ReplaceAll(str, row[0], "`"+newFieldName+"` json:\""+fieldName+",omitempty\" gorm:\"column:"+fieldName+";"+attribute)
+			str = strings.ReplaceAll(str, row[0], "`"+newFieldName+"` json:\""+fieldName+"\" gorm:\"column:"+fieldName+";"+attribute)
 		}
 	}
 
