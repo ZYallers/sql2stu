@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -17,16 +16,18 @@ var tableName string
 func convert(str string) string {
 	var modelName string
 
+	// 全部转为小写
+	str = strings.ToLower(str)
+
 	// 转换数据表名为 model 名称
-	matchTableName := regexp.MustCompile("CREATE TABLE `([a-z_0-9]+)`.*").FindAllStringSubmatch(str, -1)
+	matchTableName := regexp.MustCompile("create table `([a-z_0-9A-Z]+)`.*").FindAllStringSubmatch(str, -1)
 	if len(matchTableName) > 0 {
 		for _, row := range matchTableName {
 			tableName = row[1]
-			modelName = strings.ReplaceAll(strings.Title(strings.ReplaceAll(tableName, `_`, ` `)), ` `, ``)
+			modelName = strings.ReplaceAll(strings.Title(strings.ReplaceAll(tableName, `_`, ` `)), ` `, "")
 			str = strings.ReplaceAll(str, row[0], `type `+modelName+` struct {`)
-
 			// 转换数据表结束符
-			tableTail := regexp.MustCompile("\\) (ENGINE|AUTO_INCREMENT=|ROW_FORMAT).*").FindAllString(str, 1)
+			tableTail := regexp.MustCompile("\\) (engine|auto_increment=|row_format).*").FindAllString(str, 1)
 			if len(tableTail) > 0 {
 				str = strings.ReplaceAll(str, tableTail[0], "}")
 			}
@@ -34,17 +35,20 @@ func convert(str string) string {
 	}
 
 	// 转换为小写并且加上前缀;号
-	str = strings.ReplaceAll(str, ` NOT NULL`, `;not null`)
-	str = strings.ReplaceAll(str, ` NULL`, `;null`)
-	str = strings.ReplaceAll(str, ` AUTO_INCREMENT`, `;primaryKey;autoIncrement`)
+	str = strings.ReplaceAll(str, ` null`, `;null`)
+	str = strings.ReplaceAll(str, ` not null`, `;not null`)
+	str = strings.ReplaceAll(str, `not;null`, `;not null`)
+	str = strings.ReplaceAll(str, ` auto_increment`, `;primaryKey;autoIncrement`)
 	str = strings.ReplaceAll(str, ` unsigned`, `;unsigned`)
-	str = regexp.MustCompile("(tinyint|smallint|mediumint|int|bigint|decimal|dec|numeric|fixed|float|double|double precision|real)(.*) DEFAULT '(.*?)'").
+	str = regexp.MustCompile("character set (.*?) ").ReplaceAllString(str, ";default:''")
+	str = regexp.MustCompile("(tinyint|smallint|mediumint|int|bigint|decimal|dec|numeric|fixed|float|double|double precision|real)(.*) default '(.*?)'").
 		ReplaceAllString(str, `$1$2;default:$3`) // 去掉数值型默认值中的单引号
-	str = regexp.MustCompile(" DEFAULT '(.*?)'").ReplaceAllString(str, `;default:'$1'`)
-	str = strings.ReplaceAll(str, ` DEFAULT CURRENT_TIMESTAMP`, `;default:CURRENT_TIMESTAMP`)
+	str = regexp.MustCompile(` default '(.*?)'`).ReplaceAllString(str, `;default:'$1'`)
+	str = strings.ReplaceAll(str, ` default current_timestamp`, `;default:current_timestamp`)
+	str = strings.ReplaceAll(str, ` ;`, `;`)
 
 	// 转换备注
-	matchComment := regexp.MustCompile(" COMMENT '(.*?)',").FindAllStringSubmatch(str, -1)
+	matchComment := regexp.MustCompile(" comment '(.*?)',").FindAllStringSubmatch(str, -1)
 	if len(matchComment) > 1 {
 		for _, row := range matchComment {
 			// 英文逗号转中文，要不然会正则匹配有问题，再把中文逗号转成|符号
@@ -59,7 +63,7 @@ func convert(str string) string {
 		for _, row := range matchFieldName {
 			fieldName := row[1]
 			attribute := row[2]
-			newFieldName := strings.ReplaceAll(strings.Title(strings.ReplaceAll(fieldName, `_`, ` `)), ` `, ``)
+			newFieldName := strings.ReplaceAll(strings.Title(strings.ReplaceAll(fieldName, `_`, ` `)), ` `, "")
 			str = strings.ReplaceAll(str, row[0], "`"+newFieldName+"` json:\""+fieldName+"\" gorm:\"column:"+fieldName+";"+attribute)
 		}
 	}
@@ -69,16 +73,16 @@ func convert(str string) string {
 		ReplaceAllString(str, "$1    int    `${2}type:$3$4\"`")
 	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(decimal|dec|numeric|fixed|float|double|double precision|real)(.*),").
 		ReplaceAllString(str, "$1    float64    `${2}type:$3$4\"`")
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(varchar|char)(.*),").
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(varchar|char|year)(.*),").
 		ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(text)(.*),").
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(text|tinytext|mediumtext|longtext|enum)(.*),").
 		ReplaceAllString(str, "$1    string    `${2}type:$3$4\"`")
-	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(timestamp;)(.*),").
+	str = regexp.MustCompile("`([a-z_0-9A-Z]+)` (.*?;)(timestamp|datetime)(.*),").
 		ReplaceAllString(str, "$1    *time.Time    `${2}type:$3$4\"`")
 
 	// 删除不知道怎么转换的属性
-	str = strings.ReplaceAll(str, ` ON UPDATE CURRENT_TIMESTAMP`, ``)
-	str = regexp.MustCompile("\\s*(PRIMARY|UNIQUE)? KEY .*(,)?").ReplaceAllString(str, ``)
+	str = strings.ReplaceAll(str, ` on update current_timestamp`, "")
+	str = regexp.MustCompile("\\s*(primary|unique)? key .*(,)?").ReplaceAllString(str, "")
 
 	// 增加表名的常量定义
 	str = fmt.Sprintf("const %sTN = `%s`\n\n%s", modelName, tableName, str)
@@ -106,21 +110,6 @@ func shellEcho(str, msgType string) {
 	default:
 		fmt.Printf("%s\n", str)
 	}
-}
-
-func execShell(name string, arg ...string) ([]byte, error) {
-	// 函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
-	cmd := exec.Command(name, arg...)
-
-	// 读取io.Writer类型的cmd.Stdout，再通过bytes.Buffer(缓冲byte类型的缓冲器)将byte类型转化为[]byte类型
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	// Run执行c包含的命令，并阻塞直到完成。这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了。
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
 }
 
 func showHelpMsg() {
@@ -155,25 +144,8 @@ LOOP:
 			shellEcho("-----------BEGIN-----------", "tip")
 			output := convert(buf.String())
 			dir, _ := os.Getwd()
-			cacheFile := dir + "/sql2stu.cache"
-			if err := ioutil.WriteFile(cacheFile, []byte(output), os.ModePerm); err != nil {
-				shellEcho("ioutil.WriteFile Error: "+err.Error(), "err")
-			} else {
-				if _, err := execShell("gofmt", "-l", "-w", "-s", cacheFile); err != nil {
-					shellEcho("execShell Error: "+err.Error(), "err")
-				} else {
-					if body, err := ioutil.ReadFile(cacheFile); err != nil {
-						shellEcho("ioutil.ReadFile Error: "+err.Error(), "err")
-					} else {
-						if err := os.Remove(cacheFile); err != nil {
-							shellEcho("os.Remove Error: "+err.Error(), "err")
-						} else {
-							exportText = body
-							shellEcho(string(body), "ok")
-						}
-					}
-				}
-			}
+			exportText = []byte(output)
+			shellEcho(output, "ok")
 			shellEcho("------------END------------", "tip")
 			if text == ":cp" && exportText != nil && tableName != "" {
 				exportFile := fmt.Sprintf("%s/%s.go", dir, tableName)
